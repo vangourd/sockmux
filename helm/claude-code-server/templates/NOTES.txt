@@ -1,0 +1,52 @@
+Thank you for installing {{ .Chart.Name }}!
+
+Your release is named {{ .Release.Name }}.
+
+To access Claude Code server:
+
+{{- if eq .Values.service.type "LoadBalancer" }}
+1. Get the external IP address:
+
+   kubectl get svc {{ include "claude-code-server.fullname" . }} -n {{ .Release.Namespace }}
+
+2. Once the EXTERNAL-IP is available, connect via SSH:
+
+   ssh -p {{ .Values.service.port }} claude@<EXTERNAL-IP>
+
+{{- else if eq .Values.service.type "ClusterIP" }}
+1. Forward the port locally:
+
+   kubectl port-forward svc/{{ include "claude-code-server.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }} -n {{ .Release.Namespace }}
+
+2. Connect via SSH:
+
+   ssh -p {{ .Values.service.port }} claude@localhost
+
+{{- else if eq .Values.service.type "NodePort" }}
+1. Get the node port:
+
+   export NODE_PORT=$(kubectl get svc {{ include "claude-code-server.fullname" . }} -n {{ .Release.Namespace }} -o jsonpath='{.spec.ports[0].nodePort}')
+   export NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[0].address}')
+
+2. Connect via SSH:
+
+   ssh -p $NODE_PORT claude@$NODE_IP
+
+{{- end }}
+
+Important notes:
+- All SSH connections share the same tmux session
+- Claude Code runs with --dangerously-skip-permissions (safe in container)
+- Agent teams are enabled (experimental feature)
+- Press Ctrl+B then D to detach from tmux without closing the session
+
+{{- if not .Values.sshKeys.authorizedKeys }}
+{{- if not .Values.sshKeys.existingSecret }}
+
+WARNING: No SSH keys configured!
+Please update your values.yaml with sshKeys.authorizedKeys or reference an existing secret.
+
+{{- end }}
+{{- end }}
+
+For more information, visit: https://github.com/anthropics/claude-code

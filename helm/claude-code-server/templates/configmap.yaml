@@ -1,0 +1,11 @@
+{{- if and .Values.sshKeys.authorizedKeys (not .Values.sshKeys.existingSecret) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "claude-code-server.fullname" . }}-ssh-keys
+  labels:
+    {{- include "claude-code-server.labels" . | nindent 4 }}
+data:
+  authorized_keys: |
+    {{- .Values.sshKeys.authorizedKeys | nindent 4 }}
+{{- end }}

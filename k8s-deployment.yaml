@@ -1,0 +1,90 @@
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: claude-workspace
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: claude-code-server
+  labels:
+    app: claude-code-server
+spec:
+  replicas: 1  # Keep at 1 for shared session
+  strategy:
+    type: Recreate  # Ensure only one instance runs
+  selector:
+    matchLabels:
+      app: claude-code-server
+  template:
+    metadata:
+      labels:
+        app: claude-code-server
+    spec:
+      containers:
+      - name: claude-code
+        image: ghcr.io/vangourd/sockmux:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 2222
+          name: ssh
+          protocol: TCP
+        volumeMounts:
+        - name: workspace
+          mountPath: /home/claude
+        - name: ssh-keys
+          mountPath: /ssh-keys
+          readOnly: true
+        - name: ssh-host-keys
+          mountPath: /etc/ssh
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "2000m"
+        env:
+        - name: CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS
+          value: "1"
+        # Uncomment to add API key
+        # - name: ANTHROPIC_API_KEY
+        #   valueFrom:
+        #     secretKeyRef:
+        #       name: claude-api-key
+        #       key: api-key
+      volumes:
+      - name: workspace
+        persistentVolumeClaim:
+          claimName: claude-workspace
+      - name: ssh-keys
+        configMap:
+          name: claude-ssh-keys
+          defaultMode: 0600
+      - name: ssh-host-keys
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: claude-code-server
+  labels:
+    app: claude-code-server
+spec:
+  selector:
+    app: claude-code-server
+  ports:
+  - port: 2222
+    targetPort: 2222
+    name: ssh
+    protocol: TCP
+  type: LoadBalancer
+  # For cloud providers, you can specify loadBalancerIP
+  # loadBalancerIP: 203.0.113.123

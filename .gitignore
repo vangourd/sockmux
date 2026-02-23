@@ -1,0 +1,8 @@
+result
+result-*
+ssh-keys/
+claude-home/
+*.tar
+*.tar.gz
+.helm-charts/
+*.tgz

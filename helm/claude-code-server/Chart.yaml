@@ -1,0 +1,18 @@
+apiVersion: v2
+name: claude-code-server
+description: A Helm chart for Claude Code server with SSH access and shared tmux sessions
+type: application
+version: 0.1.0
+appVersion: "2.1.39"
+keywords:
+  - claude
+  - ai
+  - coding
+  - ssh
+  - tmux
+home: https://github.com/anthropics/claude-code
+sources:
+  - https://github.com/vangourd/sockmux
+maintainers:
+  - name: Your Name
+    email: your.email@example.com

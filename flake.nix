@@ -1,0 +1,272 @@
+{
+  description = "Claude Code container with SSH and tmux for multi-device access";
+
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    flake-utils.url = "github:numtide/flake-utils";
+    home-manager = {
+      url = "github:nix-community/home-manager";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+  };
+
+  outputs = { self, nixpkgs, flake-utils, home-manager }:
+    flake-utils.lib.eachDefaultSystem (system:
+      let
+        pkgs = import nixpkgs {
+          inherit system;
+          config.allowUnfree = true;
+        };
+
+        # Entrypoint script that sets up SSH and tmux
+        entrypoint = pkgs.writeShellScript "entrypoint" ''
+          set -e
+
+          PATH=/bin:/usr/bin:$PATH
+
+          # Create necessary directories
+          mkdir -p /var/empty /run/sshd
+
+          # Setup persistent SSH host keys in /home/claude/.ssh-host-keys
+          # This ensures the same host keys are used across container restarts
+          mkdir -p /home/claude/.ssh-host-keys
+          chown 1000:1000 /home/claude/.ssh-host-keys
+
+          # Generate SSH host keys if they don't exist in persistent storage
+          if [ ! -f /home/claude/.ssh-host-keys/ssh_host_rsa_key ]; then
+            echo "Generating persistent SSH host keys..."
+            ssh-keygen -t rsa -b 4096 -f /home/claude/.ssh-host-keys/ssh_host_rsa_key -N "" -q
+            ssh-keygen -t ed25519 -f /home/claude/.ssh-host-keys/ssh_host_ed25519_key -N "" -q
+            ssh-keygen -t ecdsa -f /home/claude/.ssh-host-keys/ssh_host_ecdsa_key -N "" -q
+          fi
+
+          # Link persistent host keys to /etc/ssh
+          ln -sf /home/claude/.ssh-host-keys/ssh_host_rsa_key /etc/ssh/ssh_host_rsa_key
+          ln -sf /home/claude/.ssh-host-keys/ssh_host_rsa_key.pub /etc/ssh/ssh_host_rsa_key.pub
+          ln -sf /home/claude/.ssh-host-keys/ssh_host_ed25519_key /etc/ssh/ssh_host_ed25519_key
+          ln -sf /home/claude/.ssh-host-keys/ssh_host_ed25519_key.pub /etc/ssh/ssh_host_ed25519_key.pub
+          ln -sf /home/claude/.ssh-host-keys/ssh_host_ecdsa_key /etc/ssh/ssh_host_ecdsa_key
+          ln -sf /home/claude/.ssh-host-keys/ssh_host_ecdsa_key.pub /etc/ssh/ssh_host_ecdsa_key.pub
+
+          # Setup as root
+          # Set proper ownership
+          chown -R 1000:1000 /home/claude 2>/dev/null || true
+
+          # Copy authorized_keys if provided via mount
+          if [ -f /ssh-keys/authorized_keys ]; then
+            mkdir -p /home/claude/.ssh
+            cp /ssh-keys/authorized_keys /home/claude/.ssh/
+            chown 1000:1000 /home/claude/.ssh/authorized_keys
+            chmod 600 /home/claude/.ssh/authorized_keys
+          fi
+
+          # Setup Nix for claude user
+          mkdir -p /nix/var/nix/profiles/per-user/claude
+          chown -R 1000:1000 /nix/var/nix/profiles/per-user/claude 2>/dev/null || true
+
+          echo "Starting SSH server..."
+          exec /bin/sshd -D -e -f /etc/sshd_config
+        '';
+
+        # SSH daemon configuration
+        sshd-config = pkgs.writeText "sshd_config" ''
+          Port 2222
+          PermitRootLogin no
+          PubkeyAuthentication yes
+          PasswordAuthentication no
+          ChallengeResponseAuthentication no
+          UsePAM no
+          UsePrivilegeSeparation no
+          StrictModes no
+          HostKey /etc/ssh/ssh_host_rsa_key
+          HostKey /etc/ssh/ssh_host_ed25519_key
+          HostKey /etc/ssh/ssh_host_ecdsa_key
+
+          # Force command to attach to tmux session
+          Match User claude
+            ForceCommand ${tmux-attach}
+        '';
+
+        # Script that gets executed on SSH login - attaches to or creates tmux session
+        tmux-attach = pkgs.writeShellScript "tmux-attach" ''
+          set -e
+
+          # Set environment
+          export HOME=/home/claude
+          export USER=claude
+          export SHELL=/bin/nu
+          export PATH=/home/claude/.nix-profile/bin:/bin:/usr/bin:$PATH
+          export SSL_CERT_FILE=/etc/ssl/certs/ca-bundle.crt
+          export NIX_SSL_CERT_FILE=/etc/ssl/certs/ca-bundle.crt
+          export CURL_CA_BUNDLE=/etc/ssl/certs/ca-bundle.crt
+          export LOCALE_ARCHIVE=/usr/lib/locale/locale-archive
+          export LANG=en_US.UTF-8
+          export LC_ALL=en_US.UTF-8
+          export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
+
+          # Source nix profile if it exists
+          [ -f /home/claude/.nix-profile/etc/profile.d/hm-session-vars.sh ] && \
+            source /home/claude/.nix-profile/etc/profile.d/hm-session-vars.sh
+
+          cd /home/claude
+
+          # Session name for shared Claude Code instance
+          SESSION_NAME="claude-code"
+
+          # Check if tmux session exists
+          if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
+            echo "Attaching to existing Claude Code session..."
+            echo "Press Ctrl+B then D to detach without closing the session"
+            sleep 1
+            exec tmux attach-session -t "$SESSION_NAME"
+          else
+            echo "Creating new shared session with Claude Code..."
+            echo "All SSH connections will share this session"
+            echo ""
+            echo "Claude Code starting with:"
+            echo "  - Agent teams enabled (experimental)"
+            echo "  - Permissions bypassed (dangerous mode)"
+            echo ""
+            echo "Press Ctrl+B then D to detach without closing the session"
+            echo ""
+            sleep 2
+            exec tmux new-session -s "$SESSION_NAME" claude --dangerously-skip-permissions
+          fi
+        '';
+
+        # Container image
+        container = pkgs.dockerTools.streamLayeredImage {
+          name = "claude-code-server";
+          tag = "latest";
+
+          contents = [
+            pkgs.bash
+            pkgs.coreutils
+            pkgs.openssh
+            pkgs.tmux
+            pkgs.git
+            pkgs.shadow  # for useradd/groupadd
+            pkgs.glibc   # for locale support
+            pkgs.glibcLocales  # locale data
+            pkgs.cacert  # SSL certificates
+
+            # Nix for home-manager
+            pkgs.nix
+
+            # Default development tools
+            pkgs.claude-code
+            pkgs.jujutsu  # jj version control
+            pkgs.yq-go    # yq YAML processor
+            pkgs.nushell  # nu shell
+
+            # Common utilities
+            pkgs.curl
+            pkgs.wget
+            pkgs.gnugrep
+            pkgs.gnused
+            pkgs.findutils
+            pkgs.which
+          ];
+
+          extraCommands = ''
+            # Create necessary directories
+            mkdir -p etc/ssh tmp home/claude
+            mkdir -p var/empty run/sshd bin usr/bin sbin
+            mkdir -p nix/var/nix/profiles/per-user nix/var/nix/gcroots/per-user
+            chmod 1777 tmp
+
+            # Create basic system files
+            echo "root:x:0:0:System Administrator:/root:/bin/bash" > etc/passwd
+            echo "sshd:x:74:74:SSH Daemon:/var/empty:/bin/false" >> etc/passwd
+            echo "claude:x:1000:1000:Claude User:/home/claude:/bin/bash" >> etc/passwd
+            echo "root:x:0:" > etc/group
+            echo "sshd:x:74:" >> etc/group
+            echo "claude:x:1000:" >> etc/group
+
+            # Setup locale
+            mkdir -p usr/lib/locale
+            ln -sf ${pkgs.glibcLocales}/lib/locale/locale-archive usr/lib/locale/locale-archive
+
+            # Setup SSL certificates
+            mkdir -p etc/ssl/certs
+            ln -sf ${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt etc/ssl/certs/ca-bundle.crt
+
+            # Create symlinks for common binaries
+            for pkg in ${pkgs.lib.concatStringsSep " " [
+              "${pkgs.openssh}"
+              "${pkgs.shadow}"
+              "${pkgs.coreutils}"
+              "${pkgs.bash}"
+              "${pkgs.tmux}"
+              "${pkgs.git}"
+              "${pkgs.nix}"
+              "${pkgs.claude-code}"
+              "${pkgs.jujutsu}"
+              "${pkgs.yq-go}"
+              "${pkgs.nushell}"
+              "${pkgs.gnugrep}"
+              "${pkgs.gnused}"
+              "${pkgs.findutils}"
+              "${pkgs.wget}"
+              "${pkgs.curl}"
+              "${pkgs.which}"
+            ]}; do
+              if [ -d "$pkg/bin" ]; then
+                for binary in "$pkg/bin"/*; do
+                  [ -f "$binary" ] && ln -sf "$binary" "bin/$(basename "$binary")" || true
+                done
+              fi
+              if [ -d "$pkg/sbin" ]; then
+                for binary in "$pkg/sbin"/*; do
+                  [ -f "$binary" ] && ln -sf "$binary" "bin/$(basename "$binary")" || true
+                done
+              fi
+            done
+
+            # Create sshd_config
+            cp ${sshd-config} etc/sshd_config
+          '';
+
+          config = {
+            Cmd = [ "${entrypoint}" ];
+            ExposedPorts = {
+              "2222/tcp" = {};
+            };
+            WorkingDir = "/home/claude";
+            Env = [
+              "PATH=/bin:/usr/bin"
+              "LANG=en_US.UTF-8"
+              "LC_ALL=en_US.UTF-8"
+              "NIX_PATH=nixpkgs=${pkgs.path}"
+              "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+              "LOCALE_ARCHIVE=/usr/lib/locale/locale-archive"
+              "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1"
+            ];
+            Volumes = {
+              "/home/claude" = {};
+              "/ssh-keys" = {};
+            };
+          };
+        };
+
+      in {
+        packages = {
+          default = container;
+          container = container;
+        };
+
+        # Development shell for testing
+        devShells.default = pkgs.mkShell {
+          buildInputs = [ pkgs.podman pkgs.kubectl ];
+
+          shellHook = ''
+            echo "Claude Code Container Development Environment"
+            echo ""
+            echo "Build container: nix build .#container"
+            echo "Load into podman: podman load < result"
+            echo "Run locally: podman run -p 2222:2222 -v ./workspace:/workspace -v ./ssh-keys:/ssh-keys claude-code-server:latest"
+          '';
+        };
+      }
+    );
+}

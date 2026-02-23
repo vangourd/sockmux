@@ -1,0 +1,100 @@
+# Default values for claude-code-server
+replicaCount: 1
+
+image:
+  repository: ghcr.io/vangourd/sockmux
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: false
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext:
+  fsGroup: 1000
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: false
+  allowPrivilegeEscalation: false
+
+service:
+  type: LoadBalancer
+  port: 2222
+  annotations: {}
+  # loadBalancerIP: ""
+
+persistence:
+  enabled: true
+  storageClass: ""
+  accessMode: ReadWriteOnce
+  size: 10Gi
+  annotations: {}
+
+sshKeys:
+  # Provide SSH public keys here
+  # Example:
+  # authorizedKeys: |
+  #   ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAAB... user@host
+  authorizedKeys: ""
+  # Or use an existing secret
+  existingSecret: ""
+  existingSecretKey: "authorized_keys"
+
+env:
+  # Experimental agent teams feature
+  CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1"
+  # Optional: Set Anthropic API key
+  # ANTHROPIC_API_KEY: ""
+
+# Use existing secret for API key
+existingApiKeySecret:
+  name: ""
+  key: "api-key"
+
+resources:
+  requests:
+    memory: "512Mi"
+    cpu: "500m"
+  limits:
+    memory: "2Gi"
+    cpu: "2000m"
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# Pod disruption budget
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+
+# Network policy
+networkPolicy:
+  enabled: false
+  policyTypes:
+    - Egress
+  egress:
+    # Allow DNS
+    - ports:
+      - protocol: UDP
+        port: 53
+    # Allow HTTPS to Anthropic API
+    - to:
+      - namespaceSelector: {}
+      ports:
+      - protocol: TCP
+        port: 443

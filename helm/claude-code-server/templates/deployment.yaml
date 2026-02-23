@@ -1,0 +1,96 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "claude-code-server.fullname" . }}
+  labels:
+    {{- include "claude-code-server.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "claude-code-server.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "claude-code-server.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "claude-code-server.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+      - name: {{ .Chart.Name }}
+        securityContext:
+          {{- toYaml .Values.securityContext | nindent 12 }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - name: ssh
+          containerPort: 2222
+          protocol: TCP
+        volumeMounts:
+        - name: home
+          mountPath: /home/claude
+        - name: ssh-keys
+          mountPath: /ssh-keys
+          readOnly: true
+        - name: ssh-host-keys
+          mountPath: /etc/ssh
+        resources:
+          {{- toYaml .Values.resources | nindent 12 }}
+        env:
+        {{- range $key, $value := .Values.env }}
+        - name: {{ $key }}
+          value: {{ $value | quote }}
+        {{- end }}
+        {{- if .Values.existingApiKeySecret.name }}
+        - name: ANTHROPIC_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.existingApiKeySecret.name }}
+              key: {{ .Values.existingApiKeySecret.key }}
+        {{- end }}
+      volumes:
+      - name: home
+        {{- if .Values.persistence.enabled }}
+        persistentVolumeClaim:
+          claimName: {{ include "claude-code-server.fullname" . }}
+        {{- else }}
+        emptyDir: {}
+        {{- end }}
+      - name: ssh-keys
+        {{- if .Values.sshKeys.existingSecret }}
+        secret:
+          secretName: {{ .Values.sshKeys.existingSecret }}
+          defaultMode: 0600
+          items:
+          - key: {{ .Values.sshKeys.existingSecretKey }}
+            path: authorized_keys
+        {{- else }}
+        configMap:
+          name: {{ include "claude-code-server.fullname" . }}-ssh-keys
+          defaultMode: 0600
+        {{- end }}
+      - name: ssh-host-keys
+        emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
