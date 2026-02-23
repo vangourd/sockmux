@@ -45,15 +45,11 @@ jobs:
         run: |
           nix build .#container --print-build-logs
 
-      - name: Load container image
-        run: |
-          docker load < result
-
-      - name: Get image name and tag
+      - name: Load container image and get info
         id: image-info
         run: |
-          # Extract image name from docker load output
-          IMAGE_ID=$(docker load < result | grep -oP 'Loaded image: \K.*')
+          # Execute the Nix result script to stream the image to docker
+          IMAGE_ID=$(./result | docker load | grep -oP 'Loaded image: \K.*')
           echo "IMAGE_ID=$IMAGE_ID" >> $GITHUB_OUTPUT
 
           # Determine tag based on event
