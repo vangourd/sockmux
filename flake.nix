@@ -18,6 +18,36 @@
           config.allowUnfree = true;
         };
 
+        # Default home-manager configuration
+        home-manager-config = pkgs.writeText "home.nix" ''
+          { config, pkgs, ... }:
+
+          {
+            home.username = "claude";
+            home.homeDirectory = "/home/claude";
+            home.stateVersion = "24.05";
+
+            # Default packages for Claude Code development
+            home.packages = with pkgs; [
+              htop
+              ripgrep
+              fd
+              bat
+              eza
+              neovim
+            ];
+
+            programs.home-manager.enable = true;
+
+            # Git configuration
+            programs.git = {
+              enable = true;
+              userName = "Claude Code";
+              userEmail = "claude@sockmux.container";
+            };
+          }
+        '';
+
         # Entrypoint script that sets up SSH and tmux
         entrypoint = pkgs.writeShellScript "entrypoint" ''
           set -e
@@ -64,6 +94,19 @@
           mkdir -p /nix/var/nix/profiles/per-user/claude
           chown -R 1000:1000 /nix/var/nix/profiles/per-user/claude 2>/dev/null || true
 
+          # Copy CLAUDE.md guide if it doesn't exist
+          if [ ! -f /home/claude/CLAUDE.md ]; then
+            cp /etc/CLAUDE.md /home/claude/CLAUDE.md
+            chown 1000:1000 /home/claude/CLAUDE.md
+          fi
+
+          # Setup default home-manager config if it doesn't exist
+          if [ ! -d /home/claude/.config/home-manager ]; then
+            mkdir -p /home/claude/.config/home-manager
+            cp ${home-manager-config} /home/claude/.config/home-manager/home.nix
+            chown -R 1000:1000 /home/claude/.config
+          fi
+
           echo "Starting SSH server..."
           exec /bin/sshd -D -e -f /etc/sshd_config
         '';
@@ -109,6 +152,21 @@
             source /home/claude/.nix-profile/etc/profile.d/hm-session-vars.sh
 
           cd /home/claude
+
+          # Initialize home-manager on first login if not already done
+          if [ ! -f /home/claude/.config/home-manager/.initialized ]; then
+            echo "First time setup: Initializing home-manager..."
+            echo "This may take a few minutes..."
+            nix-channel --add https://github.com/nix-community/home-manager/archive/master.tar.gz home-manager 2>/dev/null || true
+            nix-channel --update 2>/dev/null || true
+            export NIX_PATH="$HOME/.nix-defexpr/channels:$NIX_PATH"
+            nix-shell '<home-manager>' -A install --run "echo 'home-manager installed'" 2>/dev/null || true
+            home-manager switch 2>/dev/null || echo "Note: Run 'home-manager switch' to activate your configuration"
+            touch /home/claude/.config/home-manager/.initialized
+            echo ""
+            echo "Setup complete! Read CLAUDE.md for usage instructions."
+            echo ""
+          fi
 
           # Session name for shared Claude Code instance
           SESSION_NAME="claude-code"
@@ -225,6 +283,9 @@
 
             # Create sshd_config
             cp ${sshd-config} etc/sshd_config
+
+            # Copy CLAUDE.md guide
+            cp ${./CLAUDE.md} etc/CLAUDE.md
           '';
 
           config = {
