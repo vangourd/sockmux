@@ -4,7 +4,14 @@ This is a containerized Claude Code environment with persistent storage and Nix 
 
 ## Quick Start
 
-You're connected via SSH to a shared tmux session. All devices connecting here see the same Claude Code instance.
+You're connected via SSH to a shared tmux session running nushell. All devices connecting here see the same session.
+
+**To start Claude Code:**
+```bash
+claude --dangerously-skip-permissions
+```
+
+**Tip:** Press `Ctrl+C` in Claude Code to return to the shell. Press `Ctrl+B` then `D` to detach from tmux.
 
 ### Tmux Commands
 

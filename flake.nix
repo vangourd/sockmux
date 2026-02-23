@@ -168,27 +168,26 @@
             echo ""
           fi
 
-          # Session name for shared Claude Code instance
-          SESSION_NAME="claude-code"
+          # Session name for shared instance
+          SESSION_NAME="sockmux"
 
           # Check if tmux session exists
           if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
-            echo "Attaching to existing Claude Code session..."
+            echo "Attaching to existing sockmux session..."
             echo "Press Ctrl+B then D to detach without closing the session"
             sleep 1
             exec tmux attach-session -t "$SESSION_NAME"
           else
-            echo "Creating new shared session with Claude Code..."
+            echo "Creating new shared tmux session..."
             echo "All SSH connections will share this session"
             echo ""
-            echo "Claude Code starting with:"
-            echo "  - Agent teams enabled (experimental)"
-            echo "  - Permissions bypassed (dangerous mode)"
-            echo ""
-            echo "Press Ctrl+B then D to detach without closing the session"
+            echo "Starting nushell..."
+            echo "Run 'claude' to start Claude Code"
+            echo "Press Ctrl+C in Claude to return to shell"
+            echo "Press Ctrl+B then D to detach tmux"
             echo ""
             sleep 2
-            exec tmux new-session -s "$SESSION_NAME" claude --dangerously-skip-permissions
+            exec tmux new-session -s "$SESSION_NAME" /bin/nu
           fi
         '';
 
