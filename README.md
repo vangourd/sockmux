@@ -1,6 +1,12 @@
-# Claude Code Container Server
+<div align="center">
+  <img src="sock.png" alt="sockmux logo" width="400"/>
 
-A containerized Claude Code environment with SSH access and shared tmux sessions, designed for multi-device access in Kubernetes.
+  # sockmux
+
+  **Claude Code Container Server**
+
+  A containerized Claude Code environment with SSH access and shared tmux sessions, designed for multi-device access in Kubernetes.
+</div>
 
 ## Features
 
