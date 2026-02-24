@@ -48,19 +48,15 @@
           }
         '';
 
-        # Entrypoint script that sets up SSH and tmux
+        # Entrypoint script that sets up SSH and tmux (runs as user claude)
         entrypoint = pkgs.writeShellScript "entrypoint" ''
           set -e
 
           PATH=/bin:/usr/bin:$PATH
 
-          # Create necessary directories
-          mkdir -p /var/empty /run/sshd
-
           # Setup persistent SSH host keys in /home/claude/.ssh-host-keys
           # This ensures the same host keys are used across container restarts
           mkdir -p /home/claude/.ssh-host-keys
-          chown 1000:1000 /home/claude/.ssh-host-keys
 
           # Generate SSH host keys if they don't exist in persistent storage
           if [ ! -f /home/claude/.ssh-host-keys/ssh_host_rsa_key ]; then
@@ -70,7 +66,7 @@
             ssh-keygen -t ecdsa -f /home/claude/.ssh-host-keys/ssh_host_ecdsa_key -N "" -q
           fi
 
-          # Link persistent host keys to /etc/ssh
+          # Link persistent host keys to /etc/ssh (pre-created writable dir)
           ln -sf /home/claude/.ssh-host-keys/ssh_host_rsa_key /etc/ssh/ssh_host_rsa_key
           ln -sf /home/claude/.ssh-host-keys/ssh_host_rsa_key.pub /etc/ssh/ssh_host_rsa_key.pub
           ln -sf /home/claude/.ssh-host-keys/ssh_host_ed25519_key /etc/ssh/ssh_host_ed25519_key
@@ -78,33 +74,22 @@
           ln -sf /home/claude/.ssh-host-keys/ssh_host_ecdsa_key /etc/ssh/ssh_host_ecdsa_key
           ln -sf /home/claude/.ssh-host-keys/ssh_host_ecdsa_key.pub /etc/ssh/ssh_host_ecdsa_key.pub
 
-          # Setup as root
-          # Set proper ownership
-          chown -R 1000:1000 /home/claude 2>/dev/null || true
-
           # Copy authorized_keys if provided via mount
           if [ -f /ssh-keys/authorized_keys ]; then
             mkdir -p /home/claude/.ssh
             cp /ssh-keys/authorized_keys /home/claude/.ssh/
-            chown 1000:1000 /home/claude/.ssh/authorized_keys
             chmod 600 /home/claude/.ssh/authorized_keys
           fi
-
-          # Setup Nix for claude user
-          mkdir -p /nix/var/nix/profiles/per-user/claude
-          chown -R 1000:1000 /nix/var/nix/profiles/per-user/claude 2>/dev/null || true
 
           # Copy CLAUDE.md guide if it doesn't exist
           if [ ! -f /home/claude/CLAUDE.md ]; then
             cp /etc/CLAUDE.md /home/claude/CLAUDE.md
-            chown 1000:1000 /home/claude/CLAUDE.md
           fi
 
           # Setup default home-manager config if it doesn't exist
           if [ ! -d /home/claude/.config/home-manager ]; then
             mkdir -p /home/claude/.config/home-manager
             cp ${home-manager-config} /home/claude/.config/home-manager/home.nix
-            chown -R 1000:1000 /home/claude/.config
           fi
 
           echo "Starting SSH server..."
@@ -229,8 +214,15 @@
             # Create necessary directories
             mkdir -p etc/ssh tmp home/claude
             mkdir -p var/empty run/sshd bin usr/bin sbin
-            mkdir -p nix/var/nix/profiles/per-user nix/var/nix/gcroots/per-user
+            mkdir -p nix/var/nix/profiles/per-user/claude nix/var/nix/gcroots/per-user
             chmod 1777 tmp
+
+            # Set ownership for directories that need to be writable by claude user (1000:1000)
+            chown -R 1000:1000 home/claude
+            chown -R 1000:1000 nix/var/nix/profiles/per-user/claude
+            chown 1000:1000 etc/ssh
+            chown 1000:1000 var/empty
+            chown 1000:1000 run/sshd
 
             # Create basic system files
             echo "root:x:0:0:System Administrator:/root:/bin/bash" > etc/passwd
