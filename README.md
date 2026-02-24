@@ -303,6 +303,34 @@ kubectl run -it --rm debug --image=alpine --restart=Never -- \
 kubectl exec -it <pod-name> -- chown -R claude:claude /home/claude
 ```
 
+## Observability
+
+### OpenTelemetry Support
+
+Claude Code supports OpenTelemetry for distributed tracing and metrics. Configure an OTLP endpoint:
+
+```bash
+helm install claude-code-server oci://ghcr.io/vangourd/charts/claude-code-server \
+  --set sshKeys.authorizedKeys="$(cat ~/.ssh/id_rsa.pub)" \
+  --set opentelemetry.enabled=true \
+  --set opentelemetry.endpoint="http://otel-collector:4318"
+```
+
+Supports popular backends:
+- **Honeycomb**: Full distributed tracing
+- **Grafana Cloud**: Metrics and traces
+- **Jaeger**: Self-hosted tracing
+- **Prometheus**: Metrics collection
+- Any OTLP-compatible backend
+
+**Note**: When using Squid proxy, add your OTLP endpoint domain to the allowlist:
+```yaml
+squidProxy:
+  allowedDomains:
+    - api.honeycomb.io  # for Honeycomb
+    - .grafana.net      # for Grafana Cloud
+```
+
 ## CI/CD and Security
 
 ### GitHub Actions Workflow

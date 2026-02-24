@@ -67,7 +67,12 @@ The following table lists the configurable parameters and their default values.
 | `squidProxy.enabled` | Enable Squid proxy for domain filtering | `false` |
 | `squidProxy.allowedDomains` | List of allowed domains (with wildcards) | See values.yaml |
 | `squidProxy.denyDirectIP` | Deny direct IP access (force domain names) | `true` |
-| `networkPolicy.enabled` | Enable Kubernetes NetworkPolicy | `false` |
+| `networkPolicy.enabled` | Enable Kubernetes NetworkPolicy | `true` |
+| `opentelemetry.enabled` | Enable OpenTelemetry tracing/metrics | `false` |
+| `opentelemetry.endpoint` | OTLP endpoint URL | `""` |
+| `opentelemetry.protocol` | OTLP protocol (http/protobuf or grpc) | `"http/protobuf"` |
+| `opentelemetry.serviceName` | Service name for traces | `"claude-code-server"` |
+| `opentelemetry.headers` | OTLP headers for authentication | `{}` |
 
 ### Example: Install with Custom Values
 
@@ -131,6 +136,52 @@ Install with API key:
 helm install claude-code-server ./helm/claude-code-server \
   --set existingApiKeySecret.name=claude-api-key \
   --set sshKeys.authorizedKeys="$(cat ~/.ssh/id_rsa.pub)"
+```
+
+### Example: OpenTelemetry Integration
+
+Claude Code supports OpenTelemetry for traces and metrics. Configure an OTLP endpoint:
+
+```bash
+helm install claude-code-server ./helm/claude-code-server \
+  --set sshKeys.authorizedKeys="$(cat ~/.ssh/id_rsa.pub)" \
+  --set opentelemetry.enabled=true \
+  --set opentelemetry.endpoint="http://otel-collector:4318"
+```
+
+**With Honeycomb:**
+```yaml
+opentelemetry:
+  enabled: true
+  endpoint: "https://api.honeycomb.io:443"
+  headers:
+    x-honeycomb-team: "your-api-key"
+  resourceAttributes:
+    environment: "production"
+    service.namespace: "claude-code"
+```
+
+**With Grafana Cloud:**
+```yaml
+opentelemetry:
+  enabled: true
+  endpoint: "https://otlp-gateway-prod-us-central-0.grafana.net/otlp"
+  headers:
+    authorization: "Basic <base64-encoded-instanceid:apikey>"
+```
+
+**Secure headers with secret:**
+```bash
+# Create secret with OTLP headers
+kubectl create secret generic otel-headers \
+  --from-literal=headers="x-honeycomb-team=your-api-key"
+
+# Install with secret reference
+helm install claude-code-server ./helm/claude-code-server \
+  --set sshKeys.authorizedKeys="$(cat ~/.ssh/id_rsa.pub)" \
+  --set opentelemetry.enabled=true \
+  --set opentelemetry.endpoint="https://api.honeycomb.io:443" \
+  --set opentelemetry.existingSecret.name=otel-headers
 ```
 
 ### Squid Proxy for Domain Filtering

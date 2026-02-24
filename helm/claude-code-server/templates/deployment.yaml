@@ -74,6 +74,46 @@ spec:
         - name: no_proxy
           value: "localhost,127.0.0.1,{{ .Values.squidProxy.noProxy }}"
         {{- end }}
+        {{- if .Values.opentelemetry.enabled }}
+        # OpenTelemetry configuration
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: {{ .Values.opentelemetry.endpoint | quote }}
+        - name: OTEL_EXPORTER_OTLP_PROTOCOL
+          value: {{ .Values.opentelemetry.protocol | quote }}
+        - name: OTEL_SERVICE_NAME
+          value: {{ .Values.opentelemetry.serviceName | quote }}
+        {{- if .Values.opentelemetry.resourceAttributes }}
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: {{ include "claude-code-server.otelResourceAttributes" . | quote }}
+        {{- end }}
+        {{- if .Values.opentelemetry.tracesSampler }}
+        - name: OTEL_TRACES_SAMPLER
+          value: {{ .Values.opentelemetry.tracesSampler | quote }}
+        {{- end }}
+        {{- if .Values.opentelemetry.tracesSamplerArg }}
+        - name: OTEL_TRACES_SAMPLER_ARG
+          value: {{ .Values.opentelemetry.tracesSamplerArg | quote }}
+        {{- end }}
+        {{- if .Values.opentelemetry.exportTimeoutMillis }}
+        - name: OTEL_EXPORTER_OTLP_TIMEOUT
+          value: {{ .Values.opentelemetry.exportTimeoutMillis | quote }}
+        {{- end }}
+        {{- if .Values.opentelemetry.exportIntervalMillis }}
+        - name: OTEL_METRIC_EXPORT_INTERVAL
+          value: {{ .Values.opentelemetry.exportIntervalMillis | quote }}
+        {{- end }}
+        {{- if .Values.opentelemetry.headers }}
+        - name: OTEL_EXPORTER_OTLP_HEADERS
+          value: {{ include "claude-code-server.otelHeaders" . | quote }}
+        {{- end }}
+        {{- if .Values.opentelemetry.existingSecret.name }}
+        - name: OTEL_EXPORTER_OTLP_HEADERS
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.opentelemetry.existingSecret.name }}
+              key: headers
+        {{- end }}
+        {{- end }}
       volumes:
       - name: home
         {{- if .Values.persistence.enabled }}

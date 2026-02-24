@@ -58,3 +58,25 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{/*
+Format OTEL resource attributes as key=value,key=value
+*/}}
+{{- define "claude-code-server.otelResourceAttributes" -}}
+{{- $attrs := list -}}
+{{- range $key, $value := .Values.opentelemetry.resourceAttributes -}}
+{{- $attrs = append $attrs (printf "%s=%s" $key $value) -}}
+{{- end -}}
+{{- join "," $attrs -}}
+{{- end }}
+
+{{/*
+Format OTEL headers as key=value,key=value
+*/}}
+{{- define "claude-code-server.otelHeaders" -}}
+{{- $headers := list -}}
+{{- range $key, $value := .Values.opentelemetry.headers -}}
+{{- $headers = append $headers (printf "%s=%s" $key $value) -}}
+{{- end -}}
+{{- join "," $headers -}}
+{{- end }}

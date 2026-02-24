@@ -77,6 +77,46 @@ existingApiKeySecret:
   name: ""
   key: "api-key"
 
+# OpenTelemetry configuration
+opentelemetry:
+  enabled: false
+
+  # OTLP endpoint (e.g., "http://otel-collector:4318" or "grpc://otel-collector:4317")
+  endpoint: ""
+
+  # Protocol: http/protobuf (default) or grpc
+  protocol: "http/protobuf"
+
+  # Service name for traces/metrics
+  serviceName: "claude-code-server"
+
+  # Additional resource attributes (key=value pairs)
+  resourceAttributes: {}
+    # environment: "production"
+    # team: "platform"
+
+  # Headers for authentication (e.g., API keys)
+  headers: {}
+    # Example for Honeycomb:
+    # x-honeycomb-team: "your-api-key"
+    # Example for custom auth:
+    # authorization: "Bearer your-token"
+
+  # Use existing secret for headers (more secure than plain values)
+  existingSecret:
+    name: ""
+    # Secret should contain headers as key-value pairs
+    # kubectl create secret generic otel-headers \
+    #   --from-literal=x-honeycomb-team=your-api-key
+
+  # Sampling configuration
+  tracesSampler: "parentbased_always_on"
+  tracesSamplerArg: ""
+
+  # Export configuration
+  exportTimeoutMillis: 30000
+  exportIntervalMillis: 5000
+
 resources:
   requests:
     memory: "512Mi"
