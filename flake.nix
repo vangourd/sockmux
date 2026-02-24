@@ -216,13 +216,8 @@
             mkdir -p var/empty run/sshd bin usr/bin sbin
             mkdir -p nix/var/nix/profiles/per-user/claude nix/var/nix/gcroots/per-user
             chmod 1777 tmp
-
-            # Set ownership for directories that need to be writable by claude user (1000:1000)
-            chown -R 1000:1000 home/claude
-            chown -R 1000:1000 nix/var/nix/profiles/per-user/claude
-            chown 1000:1000 etc/ssh
-            chown 1000:1000 var/empty
-            chown 1000:1000 run/sshd
+            chmod 755 etc/ssh var/empty run/sshd
+            chmod 755 nix/var/nix/profiles/per-user/claude
 
             # Create basic system files
             echo "root:x:0:0:System Administrator:/root:/bin/bash" > etc/passwd
@@ -284,6 +279,7 @@
             ExposedPorts = {
               "2222/tcp" = {};
             };
+            User = "1000:1000";
             WorkingDir = "/home/claude";
             Env = [
               "PATH=/bin:/usr/bin"
