@@ -52,6 +52,10 @@ The following table lists the configurable parameters and their default values.
 | `resources.requests.cpu` | CPU request | `500m` |
 | `resources.limits.memory` | Memory limit | `2Gi` |
 | `resources.limits.cpu` | CPU limit | `2000m` |
+| `squidProxy.enabled` | Enable Squid proxy for domain filtering | `false` |
+| `squidProxy.allowedDomains` | List of allowed domains (with wildcards) | See values.yaml |
+| `squidProxy.denyDirectIP` | Deny direct IP access (force domain names) | `true` |
+| `networkPolicy.enabled` | Enable Kubernetes NetworkPolicy | `false` |
 
 ### Example: Install with Custom Values
 
@@ -116,6 +120,43 @@ helm install claude-code-server ./helm/claude-code-server \
   --set existingApiKeySecret.name=claude-api-key \
   --set sshKeys.authorizedKeys="$(cat ~/.ssh/id_rsa.pub)"
 ```
+
+### Example: Enable Squid Proxy for Domain Filtering
+
+Enable Squid proxy to control which domains Claude Code can access:
+
+```bash
+helm install claude-code-server ./helm/claude-code-server \
+  --set squidProxy.enabled=true \
+  --set sshKeys.authorizedKeys="$(cat ~/.ssh/id_rsa.pub)"
+```
+
+The default configuration allows:
+- Anthropic API (api.anthropic.com)
+- GitHub (for git operations)
+- NixOS cache (for package downloads)
+
+To add custom domains, create a `values.yaml`:
+
+```yaml
+squidProxy:
+  enabled: true
+  allowedDomains:
+    - .anthropic.com
+    - .github.com
+    - .nixos.org
+    # Add your allowed domains
+    - .yourdomain.com
+    - api.example.com
+```
+
+**Benefits:**
+- Layer 7 filtering by domain name
+- Block access to unauthorized services
+- Logs all outbound requests
+- Prevents data exfiltration
+
+**Note:** All HTTP/HTTPS traffic will be routed through Squid proxy when enabled.
 
 ## Accessing the Server
 

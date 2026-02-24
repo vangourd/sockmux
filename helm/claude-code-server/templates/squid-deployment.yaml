@@ -1,0 +1,81 @@
+{{- if .Values.squidProxy.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "claude-code-server.fullname" . }}-squid
+  labels:
+    {{- include "claude-code-server.labels" . | nindent 4 }}
+    app.kubernetes.io/component: squid-proxy
+spec:
+  replicas: {{ .Values.squidProxy.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "claude-code-server.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: squid-proxy
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/squid-configmap.yaml") . | sha256sum }}
+        {{- with .Values.squidProxy.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "claude-code-server.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: squid-proxy
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.squidProxy.podSecurityContext | nindent 8 }}
+      containers:
+      - name: squid
+        image: "{{ .Values.squidProxy.image.repository }}:{{ .Values.squidProxy.image.tag }}"
+        imagePullPolicy: {{ .Values.squidProxy.image.pullPolicy }}
+        ports:
+        - name: proxy
+          containerPort: 3128
+          protocol: TCP
+        volumeMounts:
+        - name: squid-config
+          mountPath: /etc/squid/squid.conf
+          subPath: squid.conf
+          readOnly: true
+        {{- if .Values.squidProxy.enableCache }}
+        - name: cache
+          mountPath: /var/spool/squid
+        {{- end }}
+        resources:
+          {{- toYaml .Values.squidProxy.resources | nindent 10 }}
+        livenessProbe:
+          tcpSocket:
+            port: 3128
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        readinessProbe:
+          tcpSocket:
+            port: 3128
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: squid-config
+        configMap:
+          name: {{ include "claude-code-server.fullname" . }}-squid-config
+      {{- if .Values.squidProxy.enableCache }}
+      - name: cache
+        emptyDir: {}
+      {{- end }}
+      {{- with .Values.squidProxy.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.squidProxy.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.squidProxy.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

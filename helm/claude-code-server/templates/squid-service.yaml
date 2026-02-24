@@ -1,0 +1,19 @@
+{{- if .Values.squidProxy.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "claude-code-server.fullname" . }}-squid
+  labels:
+    {{- include "claude-code-server.labels" . | nindent 4 }}
+    app.kubernetes.io/component: squid-proxy
+spec:
+  type: ClusterIP
+  ports:
+  - port: 3128
+    targetPort: proxy
+    protocol: TCP
+    name: proxy
+  selector:
+    {{- include "claude-code-server.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: squid-proxy
+{{- end }}
