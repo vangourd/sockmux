@@ -30,6 +30,18 @@ helm install claude-code-server ./helm/claude-code-server \
   --set sshKeys.authorizedKeys="$(cat ~/.ssh/id_rsa.pub)"
 ```
 
+## Security Features
+
+This chart deploys with security hardening enabled by default:
+
+- ✅ **NetworkPolicy**: Isolates to namespace, blocks cross-namespace traffic
+- ✅ **Restricted Security Context**: Non-root, no capabilities, seccomp filtering
+- ✅ **No Service Account**: `automountServiceAccountToken: false`
+- ✅ **SSH Key Auth Only**: No password authentication
+- 🔒 **Optional Squid Proxy**: Domain-based egress filtering
+
+See [SECURITY.md](../../../SECURITY.md) for complete security documentation.
+
 ## Configuration
 
 The following table lists the configurable parameters and their default values.
@@ -121,15 +133,9 @@ helm install claude-code-server ./helm/claude-code-server \
   --set sshKeys.authorizedKeys="$(cat ~/.ssh/id_rsa.pub)"
 ```
 
-### Example: Enable Squid Proxy for Domain Filtering
+### Squid Proxy for Domain Filtering
 
-Enable Squid proxy to control which domains Claude Code can access:
-
-```bash
-helm install claude-code-server ./helm/claude-code-server \
-  --set squidProxy.enabled=true \
-  --set sshKeys.authorizedKeys="$(cat ~/.ssh/id_rsa.pub)"
-```
+**Squid proxy is enabled by default** to control which domains Claude Code can access.
 
 The default configuration allows:
 - Anthropic API (api.anthropic.com)
@@ -156,7 +162,12 @@ squidProxy:
 - Logs all outbound requests
 - Prevents data exfiltration
 
-**Note:** All HTTP/HTTPS traffic will be routed through Squid proxy when enabled.
+**To disable Squid proxy** (not recommended):
+```bash
+helm install claude-code-server oci://ghcr.io/vangourd/charts/claude-code-server \
+  --set squidProxy.enabled=false \
+  --set sshKeys.authorizedKeys="$(cat ~/.ssh/id_rsa.pub)"
+```
 
 ## Accessing the Server
 

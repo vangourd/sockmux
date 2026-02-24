@@ -237,28 +237,42 @@ The `/home/claude` directory is mounted from a Kubernetes PersistentVolume:
 - Shared across all SSH sessions
 - Contains your shell config, nix profile, and SSH settings
 
-## Security Considerations
+## Security
 
-- **SSH keys only**: Password authentication is disabled
-- **Non-root user**: Runs as `claude` user (UID 1000)
-- **Isolated workspace**: Use k8s NetworkPolicies to restrict access
-- **Dangerous mode**: Claude Code runs with `--dangerously-skip-permissions` flag
-  - This bypasses all permission prompts
-  - Safe because the container is isolated from your host system
-  - Claude can only affect files within the container
-  - Consider adding network policies to restrict outbound connections
-- **Agent teams**: Experimental feature enabled - may have coordination issues
-- **API keys**: Store Anthropic API key in container environment or let Claude prompt
+**Default security features (enabled out of the box):**
+- ✅ **NetworkPolicy**: Isolates to namespace, blocks lateral movement
+- ✅ **Squid proxy**: Domain allowlisting for egress traffic (Anthropic, GitHub, NixOS)
+- ✅ **Container hardening**: Non-root, no capabilities, seccomp filtering
+- ✅ **SSH key auth only**: No password authentication
+- ✅ **No service account access**: Cannot access Kubernetes API
+- ⚠️ **Dangerous mode**: Claude Code bypasses permission prompts (container isolated)
 
-To add API key as environment variable:
-```yaml
-env:
-- name: ANTHROPIC_API_KEY
-  valueFrom:
-    secretKeyRef:
-      name: claude-api-key
-      key: api-key
+**Optional enhancements:**
+- 🔒 **Ingress restrictions**: Limit SSH access to specific IPs/namespaces
+- 🔒 **Custom domain allowlist**: Add/remove allowed domains
+
+### Quick Security Setup
+
+**Default (Good - Secure by Default):**
+```bash
+helm install claude-code-server oci://ghcr.io/vangourd/charts/claude-code-server \
+  --set sshKeys.authorizedKeys="$(cat ~/.ssh/id_rsa.pub)"
 ```
+Includes: NetworkPolicy, Squid proxy, container hardening
+
+**Hardened (Best):**
+```bash
+# Create dedicated namespace
+kubectl create namespace claude-code
+
+# Install in isolated namespace
+helm install claude-code-server oci://ghcr.io/vangourd/charts/claude-code-server \
+  --namespace claude-code \
+  --set sshKeys.authorizedKeys="$(cat ~/.ssh/id_rsa.pub)"
+```
+Adds: Namespace isolation
+
+📖 **See [SECURITY.md](./SECURITY.md) for complete security documentation**
 
 ## Troubleshooting
 

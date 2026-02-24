@@ -1,0 +1,142 @@
+{{- if .Values.networkPolicy.enabled }}
+---
+# NetworkPolicy for Claude Code Server - Restrict to same namespace
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "claude-code-server.fullname" . }}
+  labels:
+    {{- include "claude-code-server.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "claude-code-server.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+
+  # Ingress rules - only allow SSH from specified sources
+  ingress:
+    # Allow SSH traffic
+    - from:
+      {{- if .Values.networkPolicy.ingress.allowedSources }}
+      {{- range .Values.networkPolicy.ingress.allowedSources }}
+      - {{ . | toYaml | nindent 8 }}
+      {{- end }}
+      {{- else }}
+      # By default, allow from anywhere (SSH key auth provides security)
+      - {}
+      {{- end }}
+      ports:
+      - protocol: TCP
+        port: 2222
+
+  # Egress rules - restrict to same namespace and essential services
+  egress:
+    # Allow DNS resolution (usually in kube-system namespace)
+    - to:
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: kube-system
+      ports:
+      - protocol: UDP
+        port: 53
+      - protocol: TCP
+        port: 53
+
+    {{- if .Values.squidProxy.enabled }}
+    # When Squid is enabled, only allow egress to Squid proxy
+    - to:
+      - podSelector:
+          matchLabels:
+            {{- include "claude-code-server.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: squid-proxy
+      ports:
+      - protocol: TCP
+        port: 3128
+
+    {{- else }}
+    # When Squid is disabled, allow direct HTTPS egress
+    - to:
+      {{- if .Values.networkPolicy.egress.allowedDestinations }}
+      {{- range .Values.networkPolicy.egress.allowedDestinations }}
+      - {{ . | toYaml | nindent 8 }}
+      {{- end }}
+      {{- else }}
+      # Allow to any destination (can be restricted via allowedDestinations)
+      - {}
+      {{- end }}
+      ports:
+      - protocol: TCP
+        port: 443
+      - protocol: TCP
+        port: 80
+    {{- end }}
+
+    # Allow communication within the same namespace
+    - to:
+      - podSelector: {}
+
+    {{- with .Values.networkPolicy.egress.customRules }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+
+{{- if .Values.squidProxy.enabled }}
+---
+# NetworkPolicy for Squid Proxy - Allow only from Claude container
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "claude-code-server.fullname" . }}-squid
+  labels:
+    {{- include "claude-code-server.labels" . | nindent 4 }}
+    app.kubernetes.io/component: squid-proxy
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "claude-code-server.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: squid-proxy
+  policyTypes:
+    - Ingress
+    - Egress
+
+  # Ingress - only allow from Claude Code container in same namespace
+  ingress:
+    - from:
+      - podSelector:
+          matchLabels:
+            {{- include "claude-code-server.selectorLabels" . | nindent 12 }}
+      ports:
+      - protocol: TCP
+        port: 3128
+
+  # Egress - allow to configured destinations
+  egress:
+    # Allow DNS
+    - to:
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: kube-system
+      ports:
+      - protocol: UDP
+        port: 53
+      - protocol: TCP
+        port: 53
+
+    # Allow HTTPS egress for proxied traffic
+    - to:
+      {{- if .Values.squidProxy.allowedDestinations }}
+      {{- range .Values.squidProxy.allowedDestinations }}
+      - {{ . | toYaml | nindent 8 }}
+      {{- end }}
+      {{- else }}
+      # By default allow to any (Squid's ACL will filter)
+      - {}
+      {{- end }}
+      ports:
+      - protocol: TCP
+        port: 443
+      - protocol: TCP
+        port: 80
+{{- end }}
+{{- end }}

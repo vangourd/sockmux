@@ -29,8 +29,11 @@ spec:
       {{- end }}
       securityContext:
         {{- toYaml .Values.squidProxy.podSecurityContext | nindent 8 }}
+      automountServiceAccountToken: false
       containers:
       - name: squid
+        securityContext:
+          {{- toYaml .Values.squidProxy.securityContext | nindent 12 }}
         image: "{{ .Values.squidProxy.image.repository }}:{{ .Values.squidProxy.image.tag }}"
         imagePullPolicy: {{ .Values.squidProxy.image.pullPolicy }}
         ports:

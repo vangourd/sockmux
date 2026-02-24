@@ -18,16 +18,30 @@ serviceAccount:
 podAnnotations: {}
 
 podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
   fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+  # Prevent privilege escalation at pod level
+  supplementalGroups: []
 
 securityContext:
   runAsNonRoot: true
   runAsUser: 1000
+  runAsGroup: 1000
   capabilities:
     drop:
     - ALL
   readOnlyRootFilesystem: false
   allowPrivilegeEscalation: false
+  privileged: false
+  seccompProfile:
+    type: RuntimeDefault
+  # AppArmor profile (if available on nodes)
+  # appArmorProfile:
+  #   type: RuntimeDefault
 
 service:
   type: LoadBalancer
@@ -82,26 +96,49 @@ podDisruptionBudget:
   enabled: false
   minAvailable: 1
 
-# Network policy
+# Network policy - isolate to namespace
 networkPolicy:
-  enabled: false
-  policyTypes:
-    - Egress
+  enabled: true  # Enabled by default for security
+
+  ingress:
+    # Sources allowed to connect to SSH port
+    # Empty list means allow from anywhere (SSH key auth provides security)
+    allowedSources: []
+    # Example: Only allow from specific namespace
+    # allowedSources:
+    #   - namespaceSelector:
+    #       matchLabels:
+    #         name: allowed-namespace
+    # Example: Only allow from specific pods
+    #   - podSelector:
+    #       matchLabels:
+    #         app: allowed-app
+
   egress:
-    # Allow DNS
-    - ports:
-      - protocol: UDP
-        port: 53
-    # Allow HTTPS to Anthropic API
-    - to:
-      - namespaceSelector: {}
-      ports:
-      - protocol: TCP
-        port: 443
+    # When squidProxy.enabled=false, these destinations are allowed
+    # Empty means allow all (Squid ACL or firewall provides filtering)
+    allowedDestinations: []
+    # Example: Restrict to specific CIDRs
+    # allowedDestinations:
+    #   - ipBlock:
+    #       cidr: 0.0.0.0/0
+    #       except:
+    #         - 169.254.169.254/32  # Block AWS metadata
+    #         - 10.0.0.0/8          # Block internal networks
+
+    # Additional custom egress rules
+    customRules: []
+    # Example: Allow NTP
+    # customRules:
+    #   - to:
+    #     - {}
+    #     ports:
+    #     - protocol: UDP
+    #       port: 123
 
 # Squid Proxy for domain-based egress filtering
 squidProxy:
-  enabled: false
+  enabled: true  # Enabled by default for security
   replicaCount: 1
 
   image:
@@ -176,10 +213,33 @@ squidProxy:
       memory: "256Mi"
       cpu: "500m"
 
+  # NetworkPolicy egress destinations for Squid proxy itself
+  allowedDestinations: []
+  # Example: Restrict Squid to specific IPs
+  # allowedDestinations:
+  #   - ipBlock:
+  #       cidr: 0.0.0.0/0
+
   podSecurityContext:
-    fsGroup: 13
+    runAsNonRoot: true
     runAsUser: 13
     runAsGroup: 13
+    fsGroup: 13
+    seccompProfile:
+      type: RuntimeDefault
+
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 13
+    runAsGroup: 13
+    capabilities:
+      drop:
+      - ALL
+    readOnlyRootFilesystem: false
+    allowPrivilegeEscalation: false
+    privileged: false
+    seccompProfile:
+      type: RuntimeDefault
 
   podAnnotations: {}
   nodeSelector: {}
